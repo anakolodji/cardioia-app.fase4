@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CardioIA – Vision Assistant</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 900px;
+        margin: 32px auto;
+        background: #ffffff;
+        padding: 24px 32px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 1.8rem;
+        color: #333;
+      }
+      form {
+        margin-top: 16px;
+        margin-bottom: 24px;
+      }
+      .file-input {
+        margin-bottom: 12px;
+      }
+      .btn {
+        display: inline-block;
+        padding: 8px 16px;
+        background: #2563eb;
+        color: #fff;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-size: 0.95rem;
+      }
+      .btn:hover {
+        background: #1d4ed8;
+      }
+      .result {
+        margin-top: 16px;
+        padding: 12px 16px;
+        background: #f1f5f9;
+        border-radius: 6px;
+      }
+      .error {
+        margin-top: 16px;
+        padding: 12px 16px;
+        background: #fee2e2;
+        color: #b91c1c;
+        border-radius: 6px;
+      }
+      .image-wrapper {
+        margin-top: 16px;
+        text-align: center;
+      }
+      .image-wrapper img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+      }
+      .footer-note {
+        margin-top: 24px;
+        font-size: 0.8rem;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>CardioIA – Assistente de Visão para ECG</h1>
+      <p>
+        Faça upload de uma imagem de ECG (PNG/JPEG). O modelo ResNet18 treinado irá
+        estimar a classe (<code>normal</code> ou <code>abnormal</code>) e exibir um mapa Grad-CAM
+        sobreposto para indicar as regiões mais relevantes para a decisão.
+      </p>
+
+      <form action="/" method="post" enctype="multipart/form-data">
+        <div class="file-input">
+          <input type="file" name="image" accept="image/png, image/jpeg" required />
+        </div>
+        <button class="btn" type="submit">Analisar</button>
+      </form>
+
+      {% if error %}
+      <div class="error">{{ error }}</div>
+      {% endif %}
+
+      {% if prediction %}
+      <div class="result">
+        <p><strong>Classe prevista:</strong> {{ prediction }}</p>
+        <p><strong>Probabilidade estimada:</strong> {{ probability }}</p>
+      </div>
+      {% endif %}
+
+      {% if heatmap_url %}
+      <div class="image-wrapper">
+        <h2>Mapa de calor (Grad-CAM)</h2>
+        <img src="{{ heatmap_url }}" alt="Grad-CAM overlay" />
+      </div>
+      {% endif %}
+
+      <div class="footer-note">
+        <p>
+          <strong>Aviso importante:</strong> esta aplicação é um protótipo de pesquisa e
+          <u>não</u> deve ser usada para diagnóstico ou tomada de decisão clínica. Use
+          apenas para fins acadêmicos e de demonstração.
+        </p>
+      </div>
+    </div>
+  </body>
+  </html>
+

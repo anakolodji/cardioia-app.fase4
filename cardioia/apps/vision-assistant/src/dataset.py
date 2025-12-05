@@ -1,10 +1,14 @@
 import os
 from typing import Callable, Dict, Optional, Tuple
 
+import numpy as np
+import pandas as pd
 from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 
 class ECGImageDataset(Dataset):
@@ -202,6 +206,145 @@ def create_dataloaders_from_config(config: Dict) -> Dict[str, DataLoader]:
         raise RuntimeError(
             f"Nenhum DataLoader foi criado. Verifique se há pastas train/val/test dentro de {root}."
         )
+
+    return loaders
+
+
+class ImageManifestDataset(Dataset):
+    """Dataset baseado em manifest.csv.
+
+    Espera um DataFrame (ou caminho para CSV) com colunas:
+      - filepath: caminho absoluto ou relativo da imagem
+      - label: nome da classe (string)
+      - split: 'train', 'val' ou 'test'
+
+    As classes são mapeadas a índices inteiros usando a lista `classes` do YAML
+    (ordem controlada pelo usuário) ou, em falta, ordem alfabética das labels.
+    """
+
+    def __init__(
+        self,
+        manifest_df: "pd.DataFrame",
+        classes: Optional[Tuple[str, ...]] = None,
+        transform: Optional[Callable] = None,
+    ) -> None:
+        super().__init__()
+
+        if classes is None:
+            unique_labels = sorted(manifest_df["label"].unique().tolist())
+            classes = tuple(unique_labels)
+
+        self.classes = list(classes)
+        self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
+
+        # Garante que todas as labels do manifest existam em classes
+        unknown = set(manifest_df["label"].unique()) - set(self.classes)
+        if unknown:
+            raise ValueError(f"Labels no manifest não presentes em classes do YAML: {unknown}")
+
+        self.manifest_df = manifest_df.reset_index(drop=True)
+        self.transform = transform
+
+    def __len__(self) -> int:  # type: ignore[override]
+        return len(self.manifest_df)
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:  # type: ignore[override]
+        row = self.manifest_df.iloc[index]
+        path = str(row["filepath"])
+        label_str = str(row["label"])
+        label_idx = self.class_to_idx[label_str]
+
+        img = Image.open(path).convert("RGB")
+        img_np = np.array(img)
+
+        if self.transform is not None:
+            transformed = self.transform(image=img_np)
+            img_tensor = transformed["image"]
+        else:
+            # fallback simples para tensor CHW normalizado em [0,1]
+            img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).float() / 255.0
+
+        return img_tensor, label_idx
+
+
+def build_transforms(cfg: Dict, split: str) -> A.Compose:
+    """Cria pipeline Albumentations a partir do YAML e do split.
+
+    Usa `image_size`, `normalize_mean` e `normalize_std` do cfg.
+    Para `train` aplica augmentations leves; para `val`/`test`, apenas resize+normalize.
+    """
+
+    image_size = int(cfg.get("image_size", 224))
+    mean = cfg.get("normalize_mean", [0.485, 0.456, 0.406])
+    std = cfg.get("normalize_std", [0.229, 0.224, 0.225])
+
+    if split == "train":
+        return A.Compose(
+            [
+                A.Resize(image_size, image_size),
+                A.HorizontalFlip(p=0.5),
+                A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.5),
+                A.GaussNoise(var_limit=(5.0, 20.0), p=0.3),
+                A.Normalize(mean=mean, std=std),
+                ToTensorV2(),
+            ]
+        )
+
+    return A.Compose(
+        [
+            A.Resize(image_size, image_size),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ]
+    )
+
+
+def build_dataloaders(
+    cfg: Dict,
+    manifest_csv: str,
+    batch_size: int,
+    num_workers: int = 4,
+) -> Dict[str, DataLoader]:
+    """Cria DataLoaders train/val/test a partir de um manifest.csv.
+
+    - Lê classes do YAML (cfg["classes"]).
+    - Filtra o manifest por split.
+    - Usa ImageManifestDataset + Albumentations+ToTensorV2.
+    - Retorna dict com DataLoader por split.
+    """
+
+    manifest_df = pd.read_csv(manifest_csv)
+    required_cols = {"filepath", "label", "split"}
+    if not required_cols.issubset(manifest_df.columns):
+        raise ValueError(f"manifest.csv deve conter colunas {required_cols}, encontrado {manifest_df.columns}")
+
+    classes = cfg.get("classes")
+    if classes is not None:
+        classes_tuple = tuple(classes)
+    else:
+        classes_tuple = None
+
+    loaders: Dict[str, DataLoader] = {}
+    for split in ("train", "val", "test"):
+        df_split = manifest_df[manifest_df["split"] == split]
+        if df_split.empty:
+            continue
+
+        transform = build_transforms(cfg, split)
+        dataset = ImageManifestDataset(df_split, classes=classes_tuple, transform=transform)
+
+        shuffle = split == "train"
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+        loaders[split] = loader
+
+    if not loaders:
+        raise RuntimeError(f"Nenhum DataLoader criado a partir de {manifest_csv} (splits vazios?)")
 
     return loaders
 

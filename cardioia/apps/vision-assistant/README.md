@@ -103,71 +103,119 @@ No código, esse diretório raiz é referenciado como `DATA_DIR` através do arq
 Um exemplo mínimo de `configs/ecg.yaml` é:
 
 ```yaml
-data:
-  root: "/CAMINHO/ABSOLUTO/PARA/DATA_DIR"  # aponte aqui para o diretório raiz do dataset de ECG
-  image_size: 224
-  batch_size: 32
-  num_workers: 4
-  pin_memory: true
+data_dir: "/CAMINHO/ABSOLUTO/PARA/SEU_DATASET_ECG"  # diretório com subpastas por classe
 
-train:
-  num_epochs: 20
-  learning_rate: 1e-4
-  weight_decay: 1e-4
-  device: "cuda"  # ou "cpu" se não houver GPU
+image_size: 224
 
-model:
-  name: "simple_cnn"   # ou "resnet18" (por exemplo, para transfer learning)
-  num_classes: 2       # ajustar de acordo com o número de classes do seu dataset
+normalize_mean: [0.485, 0.456, 0.406]
+normalize_std:  [0.229, 0.224, 0.225]
+
+train_split: 0.7
+val_split:   0.15
+test_split:  0.15
+
+classes: ["normal", "abnormal"]
 ```
 
-O campo crítico para apontar o **DATA_DIR** é `data.root`. Basta editar esse caminho para a pasta onde você descompactou/baixou o dataset de ECG.
+O campo crítico para apontar o **DATA_DIR** é `data_dir`. Basta editar esse caminho para a pasta onde você descompactou/baixou o dataset de ECG.
 
 ---
 
 ## Uso básico (conceitual)
 
-### 1. Treino
+### 1. Pré-processamento e manifest.csv
 
-Um script típico de treino em `src/train.py` poderá ser executado assim:
+Use o notebook `notebooks/01_preprocess.ipynb` para:
+
+- Ler `configs/ecg.yaml`.
+- Indexar as imagens em `data_dir`.
+- Criar splits estratificados (`train`/`val`/`test`).
+- Gerar o arquivo `data/manifest.csv` com colunas `filepath`, `label`, `split`.
+
+Esse `manifest.csv` é usado pelos scripts de treino e avaliação.
+
+### 2. Treino
+
+Um script típico de treino em `src/train.py` pode ser executado assim (exemplos):
 
 ```bash
 cd cardioia/apps/vision-assistant
-python -m src.train --config configs/ecg.yaml
+
+# Treinar SimpleCNN
+python -m src.train \
+  --config configs/ecg.yaml \
+  --model simple \
+  --epochs 15 \
+  --batch-size 32 \
+  --lr 3e-4
+
+# Treinar ResNet18 com fine-tuning (descongelando últimos blocos)
+python -m src.train \
+  --config configs/ecg.yaml \
+  --model resnet18 \
+  --epochs 15 \
+  --batch-size 32 \
+  --lr 3e-4 \
+  --unfreeze-last-n 2
 ```
 
-O script deve:
+O script irá:
 
-- Ler o YAML (`ecg.yaml`).
-- Criar DataLoaders a partir de `data.root` usando `ECGImageDataset` (em `src/dataset.py`).
-- Instanciar o modelo definido em `model.name`.
-- Rodar o loop de treino/validação pelos `num_epochs`.
-- Salvar o melhor modelo em um diretório (por exemplo, `checkpoints/`).
+- Ler o YAML (`ecg.yaml`) e o `manifest.csv`.
+- Criar DataLoaders a partir do manifest usando `build_dataloaders` (em `src/dataset.py`).
+- Instanciar o modelo (`SimpleCNN` ou `ResNet18`) conforme `--model`.
+- Treinar usando AdamW + CosineAnnealingLR, com early stopping baseado em F1 macro de validação.
+- Salvar o melhor modelo em `checkpoints/best_{model}.pt` e as métricas em `checkpoints/metrics_{model}.json`.
 
-### 2. Avaliação
+### 3. Avaliação
 
-O script `src/evaluate.py` deverá carregar o modelo salvo e calcular métricas em `val/` ou `test/`, gerando gráficos (ex.: matriz de confusão) em uma pasta de resultados (ex.: `outputs/`).
+Após o treino, o script `src/evaluate.py` permite avaliar o modelo no split de teste e gerar artefatos de relatório:
 
-### 3. Grad-CAM
+```bash
+cd cardioia/apps/vision-assistant
 
-O módulo `src/gradcam.py` fornecerá funções para:
+python -m src.evaluate \
+  --config configs/ecg.yaml \
+  --model resnet18
+```
 
-- Gerar mapas Grad-CAM para imagens individuais.
-- Salvar figuras com a sobreposição do mapa de calor sobre o ECG.
+O script irá:
+
+- Carregar o checkpoint `checkpoints/best_{model}.pt`.
+- Rodar inferência no split `test` (ou `val` como fallback) usando o `manifest.csv`.
+- Calcular métricas com `scikit-learn` (accuracy, F1, ROC AUC quando aplicável).
+- Salvar:
+  - `confusion_{model}.png` – matriz de confusão normalizada.
+  - `report_{model}.txt` – relatório de classificação textual.
+  - `roc_{model}.png` – curvas ROC (quando probabilidades disponíveis).
 
 ### 4. Interface Flask
 
-O app Flask (`app/flask_app.py`) utilizará o modelo treinado para:
+Após treinar e ter o checkpoint `checkpoints/best_resnet18.pt`, é possível rodar uma interface web simples para inferência e Grad-CAM:
 
-- Receber uploads de imagens de ECG pelo `index.html`.
-- Rodar inferência usando o modelo carregado.
-- Exibir a predição (classe / probabilidade) e, opcionalmente, o Grad-CAM correspondente.
+```bash
+cd cardioia/apps/vision-assistant/app
+python flask_app.py
+```
+
+Isso irá:
+
+- Subir um servidor Flask em `http://localhost:5000/`.
+- Carregar automaticamente o modelo `best_resnet18.pt`.
+- Permitir upload de uma imagem de ECG (PNG/JPEG) via formulário.
+- Aplicar o mesmo pré-processamento usado no treino (`image_size`, `normalize_mean/std`).
+- Exibir:
+  - Classe prevista (`normal`/`abnormal`).
+  - Probabilidade estimada.
+  - Imagem de saída com overlay de Grad-CAM salva em `app/static/`.
 
 ---
 
 ## Próximos Passos
 
 1. Ajustar `configs/ecg.yaml` para apontar corretamente para o `DATA_DIR` local.
-2. Implementar/ajustar `train.py`, `evaluate.py`, `models.py` e `gradcam.py` conforme as necessidades do experimento.
-3. Rodar o treino e avaliar as métricas.
-4. Integrar o modelo na interface Flask para uso interativo.
+2. Rodar o notebook de pré-processamento para gerar o `manifest.csv`.
+3. Treinar modelos (`simple` e/ou `resnet18`) com `src/train.py` e comparar as métricas.
+4. Avaliar no split de teste com `src/evaluate.py`, analisando matriz de confusão e curvas ROC.
+5. Integrar Grad-CAM de forma mais avançada em `src/gradcam.py` e na interface Flask.
+6. Explorar uso em outros datasets (ex.: `chestxray.yaml`).

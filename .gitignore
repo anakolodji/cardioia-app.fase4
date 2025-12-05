@@ -1,0 +1,23 @@
+# Ambiente virtual
+.venv/
+venv/
+
+# Artefatos Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Dados e modelos grandes do Vision Assistant
+cardioia/apps/vision-assistant/data/
+!cardioia/apps/vision-assistant/data/README.md
+
+cardioia/apps/vision-assistant/checkpoints/
+
+# Notebooks: checkpoints temporários
+**/.ipynb_checkpoints/
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db

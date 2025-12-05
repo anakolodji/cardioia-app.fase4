@@ -1,6 +1,7 @@
-torch>=2.3; sys_platform!="darwin" or platform_machine!="arm64"
-torchvision>=0.18
-torchaudio>=2.3
+numpy<2.0
+torch>=2.2.0
+torchvision>=0.17.0
+torchaudio>=2.2.0
 # tensorflow>=2.16; python_version>="3.10" ; extra == "tf-option"  # deixe comentado se optar só por PyTorch
 scikit-learn>=1.5
 opencv-python>=4.10

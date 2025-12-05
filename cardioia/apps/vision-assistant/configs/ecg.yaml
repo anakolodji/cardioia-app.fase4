@@ -1,0 +1,20 @@
+"""Configuração base para treino em ECG (imagens PNG/JPG em pastas por classe).
+
+Edite principalmente:
+- data_dir: caminho para o diretório raiz do dataset de ECG
+- classes: lista de nomes de classes na ordem desejada
+"""
+
+data_dir: "/CAMINHO/ABSOLUTO/PARA/SEU_DATASET_ECG"  # ajuste para o diretório raiz com train/ val/ test/
+
+image_size: 224
+
+normalize_mean: [0.485, 0.456, 0.406]  # médias padrão ImageNet (ok para muitos modelos pré-treinados)
+normalize_std:  [0.229, 0.224, 0.225]  # desvios padrão padrão ImageNet
+
+train_split: 0.7   # usado apenas se for necessário criar splits automáticos
+val_split:   0.15
+test_split:  0.15
+
+classes: ["normal", "abnormal"]  # ajuste conforme as pastas/classes reais do seu dataset
+

@@ -79,11 +79,21 @@ class ECGImageDataset(Dataset):
         return img, target
 
 
-def _build_transforms(image_size: int = 224, is_train: bool = True) -> Callable:
+def _build_transforms(
+    image_size: int = 224,
+    is_train: bool = True,
+    mean: Optional[Tuple[float, float, float]] = None,
+    std: Optional[Tuple[float, float, float]] = None,
+) -> Callable:
     """Cria transforms padrão para ECG em imagem.
 
     Para ECG em PNG, tratamos como imagem RGB normal. Augmentations leves no treino.
     """
+
+    if mean is None:
+        mean = (0.5, 0.5, 0.5)
+    if std is None:
+        std = (0.5, 0.5, 0.5)
 
     if is_train:
         return transforms.Compose(
@@ -91,7 +101,7 @@ def _build_transforms(image_size: int = 224, is_train: bool = True) -> Callable:
                 transforms.Resize((image_size, image_size)),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+                transforms.Normalize(mean=list(mean), std=list(std)),
             ]
         )
 
@@ -99,7 +109,7 @@ def _build_transforms(image_size: int = 224, is_train: bool = True) -> Callable:
         [
             transforms.Resize((image_size, image_size)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            transforms.Normalize(mean=list(mean), std=list(std)),
         ]
     )
 
@@ -120,15 +130,48 @@ def create_dataloaders_from_config(config: Dict) -> Dict[str, DataLoader]:
     Só cria loaders para splits cujo diretório existir.
     """
 
-    data_cfg = config.get("data", {})
-    root = data_cfg.get("root")
-    if root is None:
-        raise ValueError("Config de dados deve conter a chave 'data.root'")
+    # Suporta dois formatos de config:
+    # 1) Formato antigo:
+    #       data:
+    #         root: ...
+    #         image_size: ...
+    # 2) Formato novo (usado nos YAML atuais):
+    #       data_dir: ...
+    #       image_size: ...
 
-    image_size = int(data_cfg.get("image_size", 224))
-    batch_size = int(data_cfg.get("batch_size", 32))
-    num_workers = int(data_cfg.get("num_workers", 4))
-    pin_memory = bool(data_cfg.get("pin_memory", True))
+    data_cfg = config.get("data", {})
+
+    root = None
+    if isinstance(data_cfg, dict):
+        root = data_cfg.get("root") or data_cfg.get("data_dir")
+
+    if root is None:
+        root = config.get("data_dir")
+
+    if root is None:
+        raise ValueError(
+            "Config de dados deve conter 'data.root', 'data.data_dir' ou 'data_dir' na raiz"
+        )
+
+    # image_size pode estar em data.image_size (formato antigo) ou na raiz (formato novo)
+    image_size = int(data_cfg.get("image_size", config.get("image_size", 224)))
+
+    batch_size = int(data_cfg.get("batch_size", config.get("batch_size", 32)))
+    num_workers = int(data_cfg.get("num_workers", config.get("num_workers", 4)))
+    pin_memory = bool(data_cfg.get("pin_memory", config.get("pin_memory", True)))
+
+    # Normalização: se normalize_mean/std existirem, usa; senão cai no default de _build_transforms
+    normalize_mean = config.get("normalize_mean") or data_cfg.get("normalize_mean")
+    normalize_std = config.get("normalize_std") or data_cfg.get("normalize_std")
+    mean_tuple: Optional[Tuple[float, float, float]]
+    std_tuple: Optional[Tuple[float, float, float]]
+
+    if normalize_mean is not None and normalize_std is not None:
+        mean_tuple = tuple(float(x) for x in normalize_mean)
+        std_tuple = tuple(float(x) for x in normalize_std)
+    else:
+        mean_tuple = None
+        std_tuple = None
 
     loaders: Dict[str, DataLoader] = {}
     for split in ("train", "val", "test"):
@@ -137,7 +180,12 @@ def create_dataloaders_from_config(config: Dict) -> Dict[str, DataLoader]:
             continue
 
         is_train = split == "train"
-        transform = _build_transforms(image_size=image_size, is_train=is_train)
+        transform = _build_transforms(
+            image_size=image_size,
+            is_train=is_train,
+            mean=mean_tuple,
+            std=std_tuple,
+        )
         dataset = ECGImageDataset(root=root, split=split, transform=transform)
 
         shuffle = is_train

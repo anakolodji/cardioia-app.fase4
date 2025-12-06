@@ -158,7 +158,8 @@ def main() -> None:
     cfg["model"] = {
         "name": args.model,
         "num_classes": len(classes),
-        "pretrained": True if args.model == "resnet18" else False,
+        # Desabilita pesos pretrained por padrão para evitar downloads em ambientes sem internet
+        "pretrained": False,
         "unfreeze_last_n": args.unfreeze_last_n,
     }
 

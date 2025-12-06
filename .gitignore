@@ -10,10 +10,7 @@ __pycache__/
 *.log
 
 # Dados e modelos grandes do Vision Assistant
-cardioia/apps/vision-assistant/data/
-!cardioia/apps/vision-assistant/data/README.md
-
-cardioia/apps/vision-assistant/checkpoints/
+cardioia/checkpoints/
 
 # Notebooks: checkpoints temporários
 **/.ipynb_checkpoints/

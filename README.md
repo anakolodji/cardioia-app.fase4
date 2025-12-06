@@ -46,9 +46,10 @@ cardioia/
 As principais dependências estão em `requirements.txt`:
 
 ```text
-torch>=2.3; sys_platform!="darwin" or platform_machine!="arm64"
-torchvision>=0.18
-torchaudio>=2.3
+numpy<2.0
+torch>=2.2.0
+torchvision>=0.17.0
+torchaudio>=2.2.0
 # tensorflow>=2.16; python_version>="3.10" ; extra == "tf-option"  # deixe comentado se optar só por PyTorch
 scikit-learn>=1.5
 opencv-python>=4.10
@@ -66,44 +67,65 @@ pyyaml>=6.0
 
 ### Instalação
 
-Dentro da pasta `apps/vision-assistant`, execute:
+Na raiz do projeto (onde está a pasta `cardioia/`), recomenda-se criar um ambiente virtual e instalar as dependências do módulo:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate  # Unix/macOS
+
+pip install --upgrade pip
+pip install -r cardioia/apps/vision-assistant/requirements.txt
 ```
 
-Recomenda-se usar um ambiente virtual (por exemplo, `python -m venv .venv` e depois `source .venv/bin/activate` em Unix/macOS, ou `.venv\\Scripts\\activate` no Windows).
+No Windows, a ativação típica é:
+
+```bash
+.venv\Scripts\activate
+```
 
 ---
 
-## Estrutura esperada dos dados (DATA_DIR)
+## Estrutura dos dados e manifest.csv
 
-Os dados de ECG em imagem são esperados no formato de **pastas por classe**, separados em `train/`, `val/` e `test/` (os últimos dois opcionais):
+No uso atual, o dataset real de ECG é organizado em uma pasta bruta `ecg_raw/` (com pastas originais do autor do dataset) e um arquivo `manifest.csv` com os caminhos e rótulos finais em português.
+
+Estrutura típica em `apps/vision-assistant/data/`:
 
 ```text
-DATA_DIR/
-  train/
-    classe_0/  *.png, *.jpg, ...
-    classe_1/  *.png, *.jpg, ...
-    ...
-  val/        (opcional)
-    classe_0/  *.png, *.jpg, ...
-    classe_1/  *.png, *.jpg, ...
-  test/       (opcional)
-    classe_0/  *.png, *.jpg, ...
-    classe_1/  *.png, *.jpg, ...
+data/
+  ecg_raw/
+    ECG Images of Myocardial Infarction Patients/
+    ECG Images of Patient that have abnormal heartbeat/
+    ECG Images of Patient that have History of MI/
+    Normal Person ECG Images (284x12=3408)/
+
+  manifest.csv   # gerado a partir do notebook 01_preprocess ou do script make_manifest_ecg.py
+  README.md
 ```
 
-No código, esse diretório raiz é referenciado como `DATA_DIR` através do arquivo de configuração YAML (`configs/ecg.yaml`).
+O `manifest.csv` contém colunas:
+
+- `filepath`: caminho absoluto da imagem
+- `label`: rótulo em português (`infarto_mi`, `batimento_anormal`, `historico_infarto`, `normal`)
+- `split`: `train`, `val` ou `test`
+
+Esse arquivo é consumido pelos DataLoaders em `src/dataset.py` e pelos scripts de treino/avaliação.
 
 ---
 
 ## Configuração via YAML (ecg.yaml)
 
-Um exemplo mínimo de `configs/ecg.yaml` é:
+Um exemplo mínimo de `configs/ecg.yaml` (já alinhado com o dataset real e o manifest) é:
 
 ```yaml
-data_dir: "/CAMINHO/ABSOLUTO/PARA/SEU_DATASET_ECG"  # diretório com subpastas por classe
+"""Configuração base para treino em ECG (imagens PNG/JPG em pastas por classe).
+
+Edite principalmente:
+- data_dir: caminho para o diretório raiz do dataset de ECG
+- classes: lista de nomes de classes na ordem desejada
+"""
+
+data_dir: "cardioia/apps/vision-assistant/data"
 
 image_size: 224
 
@@ -114,54 +136,51 @@ train_split: 0.7
 val_split:   0.15
 test_split:  0.15
 
-classes: ["normal", "abnormal"]
+classes:
+  - infarto_mi
+  - batimento_anormal
+  - historico_infarto
+  - normal
 ```
 
-O campo crítico para apontar o **DATA_DIR** é `data_dir`. Basta editar esse caminho para a pasta onde você descompactou/baixou o dataset de ECG.
+O campo crítico para apontar o **DATA_DIR** é `data_dir`. O `manifest.csv` é esperado em `data/manifest.csv` dentro desse diretório.
 
 ---
 
 ## Uso básico (conceitual)
 
-### 1. Pré-processamento e manifest.csv
+### 1. Pré-processamento e manifest.csv (Notebook 01)
 
-Use o notebook `notebooks/01_preprocess.ipynb` para:
+Use o notebook `notebooks/01_preprocess.ipynb` (ou o script `scripts/make_manifest_ecg.py`) para:
 
-- Ler `configs/ecg.yaml`.
-- Indexar as imagens em `data_dir`.
+- Ler as pastas brutas em `data/ecg_raw/`.
+- Mapear nomes de pastas originais → rótulos em português.
 - Criar splits estratificados (`train`/`val`/`test`).
 - Gerar o arquivo `data/manifest.csv` com colunas `filepath`, `label`, `split`.
 
 Esse `manifest.csv` é usado pelos scripts de treino e avaliação.
 
-### 2. Treino
+### 2. Treino (Notebook 02 ou terminal)
 
-Um script típico de treino em `src/train.py` pode ser executado assim (exemplos):
+O notebook `notebooks/02_cnn_training.ipynb` mostra exemplos de como disparar o treino e a avaliação a partir do Python, além de visualizar o histórico e as figuras geradas.
+
+Diretamente no terminal (a partir da raiz `cardioia-app.fase4`), o treino pode ser feito assim:
 
 ```bash
-cd cardioia/apps/vision-assistant
+source .venv/bin/activate  # se ainda não estiver ativo
 
-# Treinar SimpleCNN
-python -m src.train \
-  --config configs/ecg.yaml \
-  --model simple \
-  --epochs 15 \
-  --batch-size 32 \
-  --lr 3e-4
-
-# Treinar ResNet18 com fine-tuning (descongelando últimos blocos)
-python -m src.train \
-  --config configs/ecg.yaml \
+python3 cardioia/apps/vision-assistant/src/train.py \
+  --config cardioia/apps/vision-assistant/configs/ecg.yaml \
   --model resnet18 \
-  --epochs 15 \
+  --epochs 20 \
   --batch-size 32 \
-  --lr 3e-4 \
+  --lr 1e-4 \
   --unfreeze-last-n 2
 ```
 
 O script irá:
 
-- Ler o YAML (`ecg.yaml`) e o `manifest.csv`.
+- Ler o YAML (`ecg.yaml`) e o `manifest.csv` em `data/`.
 - Criar DataLoaders a partir do manifest usando `build_dataloaders` (em `src/dataset.py`).
 - Instanciar o modelo (`SimpleCNN` ou `ResNet18`) conforme `--model`.
 - Treinar usando AdamW + CosineAnnealingLR, com early stopping baseado em F1 macro de validação.
@@ -172,10 +191,10 @@ O script irá:
 Após o treino, o script `src/evaluate.py` permite avaliar o modelo no split de teste e gerar artefatos de relatório:
 
 ```bash
-cd cardioia/apps/vision-assistant
+source .venv/bin/activate  # se necessário
 
-python -m src.evaluate \
-  --config configs/ecg.yaml \
+python3 cardioia/apps/vision-assistant/src/evaluate.py \
+  --config cardioia/apps/vision-assistant/configs/ecg.yaml \
   --model resnet18
 ```
 
@@ -185,17 +204,19 @@ O script irá:
 - Rodar inferência no split `test` (ou `val` como fallback) usando o `manifest.csv`.
 - Calcular métricas com `scikit-learn` (accuracy, F1, ROC AUC quando aplicável).
 - Salvar:
-  - `confusion_{model}.png` – matriz de confusão normalizada.
-  - `report_{model}.txt` – relatório de classificação textual.
-  - `roc_{model}.png` – curvas ROC (quando probabilidades disponíveis).
+  - `confusion_matrix_{model}.png` – matriz de confusão normalizada.
+  - `classification_report_{model}.txt` – relatório de classificação textual.
+  - `roc_curves_{model}.png` – curvas ROC (quando probabilidades disponíveis).
 
 ### 4. Interface Flask
 
 Após treinar e ter o checkpoint `checkpoints/best_resnet18.pt`, é possível rodar uma interface web simples para inferência e Grad-CAM:
 
 ```bash
-cd cardioia/apps/vision-assistant/app
-python flask_app.py
+source .venv/bin/activate  # se necessário
+
+export FLASK_APP=cardioia.apps.vision-assistant.app.flask_app
+python3 -m flask --app cardioia.apps.vision-assistant.app.flask_app run
 ```
 
 Isso irá:
@@ -205,7 +226,7 @@ Isso irá:
 - Permitir upload de uma imagem de ECG (PNG/JPEG) via formulário.
 - Aplicar o mesmo pré-processamento usado no treino (`image_size`, `normalize_mean/std`).
 - Exibir:
-  - Classe prevista (`normal`/`abnormal`).
+  - Classe prevista (`infarto_mi`, `batimento_anormal`, `historico_infarto`, `normal`).
   - Probabilidade estimada.
   - Imagem de saída com overlay de Grad-CAM salva em `app/static/`.
 
@@ -213,9 +234,9 @@ Isso irá:
 
 ## Próximos Passos
 
-1. Ajustar `configs/ecg.yaml` para apontar corretamente para o `DATA_DIR` local.
-2. Rodar o notebook de pré-processamento para gerar o `manifest.csv`.
-3. Treinar modelos (`simple` e/ou `resnet18`) com `src/train.py` e comparar as métricas.
+1. Ajustar `configs/ecg.yaml` para apontar corretamente para o `data_dir` local e classes em português.
+2. Rodar o notebook de pré-processamento (`01_preprocess.ipynb`) ou o script `scripts/make_manifest_ecg.py` para gerar o `manifest.csv`.
+3. Treinar modelos (`simple` e/ou `resnet18`) com `src/train.py` (via notebook 02 ou terminal) e comparar as métricas.
 4. Avaliar no split de teste com `src/evaluate.py`, analisando matriz de confusão e curvas ROC.
 5. Integrar Grad-CAM de forma mais avançada em `src/gradcam.py` e na interface Flask.
 6. Explorar uso em outros datasets (ex.: `chestxray.yaml`).

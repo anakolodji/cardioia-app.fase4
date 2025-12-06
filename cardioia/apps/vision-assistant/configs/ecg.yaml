@@ -1,9 +1,8 @@
-"""Configuração base para treino em ECG (imagens PNG/JPG em pastas por classe).
-
-Edite principalmente:
-- data_dir: caminho para o diretório raiz do dataset de ECG
-- classes: lista de nomes de classes na ordem desejada
-"""
+# Configuração base para treino em ECG (imagens PNG/JPG em pastas por classe).
+#
+# Edite principalmente:
+# - data_dir: caminho para o diretório raiz do dataset de ECG
+# - classes: lista de nomes de classes na ordem desejada
 
 data_dir: "cardioia/apps/vision-assistant/data"  
 

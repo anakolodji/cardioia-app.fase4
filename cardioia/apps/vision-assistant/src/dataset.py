@@ -284,7 +284,8 @@ def build_transforms(cfg: Dict, split: str) -> A.Compose:
                 A.Resize(image_size, image_size),
                 A.HorizontalFlip(p=0.5),
                 A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.5),
-                A.GaussNoise(var_limit=(5.0, 20.0), p=0.3),
+                # Usa parâmetros padrão para compatibilidade com múltiplas versões do Albumentations
+                A.GaussNoise(p=0.3),
                 A.Normalize(mean=mean, std=std),
                 ToTensorV2(),
             ]

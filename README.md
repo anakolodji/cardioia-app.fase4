@@ -200,13 +200,39 @@ python3 cardioia/apps/vision-assistant/src/evaluate.py \
 
 O script irá:
 
-- Carregar o checkpoint `checkpoints/best_{model}.pt`.
+- Carregar o checkpoint `checkpoints/best_{model}.pt` gerado durante o treino
+  (por exemplo, `checkpoints/best_resnet18.pt`).
 - Rodar inferência no split `test` (ou `val` como fallback) usando o `manifest.csv`.
-- Calcular métricas com `scikit-learn` (accuracy, F1, ROC AUC quando aplicável).
-- Salvar:
-  - `confusion_matrix_{model}.png` – matriz de confusão normalizada.
-  - `classification_report_{model}.txt` – relatório de classificação textual.
-  - `roc_curves_{model}.png` – curvas ROC (quando probabilidades disponíveis).
+- Calcular métricas com `scikit-learn` (accuracy, F1, etc.).
+- Salvar artefatos de avaliação em `checkpoints/`, incluindo, para o modelo ResNet18:
+  - `confusion_resnet18.png` – **matriz de confusão** (print principal de desempenho por classe).
+  - `roc_resnet18.png` – **curvas ROC** (one-vs-rest para as quatro classes).
+  - `report_resnet18.txt` – **relatório textual** com precisão/recall/F1 por classe.
+  - `metrics_resnet18.json` – histórico de treino (loss, F1 de validação, melhor epoch).
+
+### 3.1 Resultados atuais (ResNet18 – ECG em 4 classes)
+
+Os experimentos executados (ver `notebooks/02_cnn_training.ipynb` e relatórios em
+`cardioia/apps/vision-assistant/docs`) obtiveram, para o modelo `ResNet18` treinado
+com `unfreeze_last_n = 2`:
+
+- **Validação**:
+  - Melhor epoch: **10**
+  - Melhor F1 macro (val): ≈ **0.876**
+
+- **Teste** (140 imagens, 4 classes em português: `infarto_mi`, `batimento_anormal`,
+  `historico_infarto`, `normal`):
+  - Acurácia global: ≈ **0.90**
+  - Macro F1 (teste): ≈ **0.89**
+  - Weighted F1 (teste): ≈ **0.90**
+
+As figuras/"prints" principais ficam em `cardioia/checkpoints/`:
+
+- `confusion_resnet18.png` – matriz de confusão.
+- `roc_resnet18.png` – curvas ROC.
+
+Esses arquivos podem ser usados diretamente em apresentações, relatórios ou TCC
+como evidência visual do desempenho do modelo.
 
 ### 4. Interface Flask
 
@@ -232,11 +258,11 @@ Isso irá:
 
 ---
 
-## Próximos Passos
 
-1. Ajustar `configs/ecg.yaml` para apontar corretamente para o `data_dir` local e classes em português.
-2. Rodar o notebook de pré-processamento (`01_preprocess.ipynb`) ou o script `scripts/make_manifest_ecg.py` para gerar o `manifest.csv`.
-3. Treinar modelos (`simple` e/ou `resnet18`) com `src/train.py` (via notebook 02 ou terminal) e comparar as métricas.
-4. Avaliar no split de teste com `src/evaluate.py`, analisando matriz de confusão e curvas ROC.
-5. Integrar Grad-CAM de forma mais avançada em `src/gradcam.py` e na interface Flask.
-6. Explorar uso em outros datasets (ex.: `chestxray.yaml`).
+**Documentação detalhada:** `RELATORIO_VISAO_PREPROCESS.md` / `RELATORIO_VISAO_CNN.md` em `cardioia/apps/vision-assistant/docs/`.
+
+
+FIAP - Faculdade de Informática e Administração Paulista
+
+Aluna: Ana Ingrid Pires Alves Kolodji 
+

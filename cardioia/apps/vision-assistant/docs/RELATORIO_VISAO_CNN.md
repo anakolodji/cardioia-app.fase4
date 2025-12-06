@@ -101,31 +101,66 @@ Essa abordagem busca aproveitar representações aprendidas em imagens naturais 
 
 ---
 
-## 4. Resultados experimentais (exemplo simulado)
+## 4. Resultados experimentais (execução real – ResNet18)
 
-> Atenção: os números abaixo são **simulados** para ilustração do relatório e devem ser substituídos por resultados reais após a execução completa dos scripts de treino/avaliação.
+Os resultados abaixo foram obtidos a partir da execução real do pipeline descrito no notebook `02_cnn_training.ipynb`, usando o modelo `ResNet18` com `unfreeze_last_n = 2` e o manifest gerado no pré-processamento.
 
-### 4.1 Tabela resumo
+### 4.1 Desempenho em validação
 
-| Modelo     | Acurácia Val | F1 Macro Val | Acurácia Teste | F1 Macro Teste | ROC AUC (binário) |
-|-----------|--------------|--------------|----------------|----------------|--------------------|
-| SimpleCNN | 0.82         | 0.80         | 0.81           | 0.79           | 0.86               |
-| ResNet18  | 0.87         | 0.85         | 0.86           | 0.84           | 0.90               |
+Durante o treino, monitoramos a métrica **F1 macro** no split de validação. O histórico de treino (armazenado em `checkpoints/metrics_resnet18.json`) mostra melhora progressiva de `val_f1` ao longo das épocas, com melhor resultado em:
 
-- **Observações**:
-  - A `ResNet18` com `unfreeze_last_n = 2` supera a [SimpleCNN](cci:2://file:///Users/anakolodji/Desktop/ia/CardioIA/cardioia-app.fase4/cardioia/apps/vision-assistant/src/models.py:69:0-111:48) em todas as métricas.
-  - A diferença de F1 macro indica melhor equilíbrio entre as classes `normal` e `abnormal`.
+- **Epoch**: 10
+- **Melhor F1 macro em validação**: ≈ **0.876**
 
-### 4.2 Figuras geradas
+As curvas de loss e F1 ao longo das épocas indicam queda consistente de `train_loss` e `val_loss`, com aumento de `val_f1`, sugerindo bom ajuste sem overfitting extremo dentro desse intervalo de épocas.
 
-Os scripts produzem, para cada modelo:
+### 4.2 Desempenho em teste (4 classes)
 
-- `confusion_{model}.png` – **Matriz de confusão** normalizada.
-  - Permite visualizar onde o modelo mais erra (ex.: confusão entre `abnormal` leve e `normal`).
-- `roc_{model}.png` – **Curvas ROC** (one-vs-rest se multi-classe).
-  - Para o problema binário, destaca a curva para a classe `abnormal` (patológica).
+A avaliação final no split de **teste** foi realizada via `src/evaluate.py`. O relatório de classificação consolidado para as quatro classes (em português) foi:
 
-Essas figuras devem ser incluídas em relatórios ou apresentações para ilustrar o desempenho do modelo.
+- **Acurácia global (teste)**: ≈ **0.90** (140 amostras)
+
+Por classe:
+
+- `infarto_mi`:
+  - Precisão: **1.00**
+  - Recall: **1.00**
+  - F1-score: **1.00**
+  - Suporte: 36
+- `batimento_anormal`:
+  - Precisão: **0.86**
+  - Recall: **0.89**
+  - F1-score: **0.87**
+  - Suporte: 35
+- `historico_infarto`:
+  - Precisão: **0.79**
+  - Recall: **0.73**
+  - F1-score: **0.76**
+  - Suporte: 26
+- `normal`:
+  - Precisão: **0.91**
+  - Recall: **0.93**
+  - F1-score: **0.92**
+  - Suporte: 43
+
+Em termos agregados:
+
+- **Macro avg F1 (teste)**: ≈ **0.89**
+- **Weighted avg F1 (teste)**: ≈ **0.90**
+
+Esses resultados indicam bom equilíbrio entre as quatro classes, com desempenho particularmente forte para `infarto_mi` e `normal`, e métricas ainda satisfatórias para `batimento_anormal` e `historico_infarto`.
+
+### 4.3 Figuras e artefatos gerados
+
+A execução do script de avaliação produz os seguintes arquivos em `checkpoints/`:
+
+- `confusion_resnet18.png` – **Matriz de confusão** para as quatro classes.
+  - Útil para identificar padrões de erro, por exemplo, confusão entre `historico_infarto` e `batimento_anormal`.
+- `roc_resnet18.png` – **Curvas ROC** (one-vs-rest) para cada classe.
+- `report_resnet18.txt` – relatório textual com as métricas de classificação.
+- `best_resnet18.pt` – pesos do melhor modelo (com base em `val_f1`), utilizado posteriormente pela interface Flask para inferência.
+
+Esses artefatos servem como base para relatórios, apresentações e integração com a aplicação de inferência/Grad-CAM.
 
 ---
 

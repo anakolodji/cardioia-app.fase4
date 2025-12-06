@@ -2,49 +2,58 @@
 
 ## Dataset escolhido e estrutura de pastas
 
-### Dataset
+### Dataset real utilizado
 
-Para este experimento estamos usando um dataset de **ECG em imagens** (PNG/JPG) obtido a partir de traçados de eletrocardiograma. Cada imagem representa um exame (ou janela de um exame) e é rotulada em categorias clínicas, por exemplo:
+Para este experimento estamos usando um dataset de **ECG em imagens** (PNG/JPG) obtido a partir de traçados de eletrocardiograma. Cada imagem representa um exame (ou janela de um exame) e é rotulada em uma das seguintes categorias (em português), de acordo com as pastas originais do dataset:
 
-- **normal**
-- **abnormal** (ou outra nomenclatura específica, como tipos de arritmia)
+- **infarto_mi**  – pacientes com infarto do miocárdio.
+- **batimento_anormal** – pacientes com batimentos cardíacos anormais.
+- **historico_infarto** – pacientes com histórico prévio de infarto.
+- **normal** – exames sem alterações relevantes.
 
-O dataset foi organizado localmente em um diretório referenciado no YAML por:
+Após a varredura das pastas, o notebook de pré-processamento contabilizou **928 imagens** no total, com a seguinte distribuição por classe:
 
-```yaml
-data_dir: "/CAMINHO/ABSOLUTO/PARA/SEU_DATASET_ECG"
-classes: ["normal", "abnormal"]
-```
+- `normal`: 284 imagens
+- `infarto_mi`: 239 imagens
+- `batimento_anormal`: 233 imagens
+- `historico_infarto`: 172 imagens
 
-### Estrutura de pastas
+O diretório raiz do dataset é configurado via YAML (ver `configs/ecg.yaml`), e o notebook gera um `manifest.csv` consolidando caminhos e rótulos.
 
-O dataset foi organizado em uma estrutura de pastas por classe, conforme o exemplo abaixo:
+### Estrutura de pastas original
+
+As imagens foram fornecidas em subpastas por classe, aproximadamente no formato:
 
 ```text
-DATA_DIR/
-  train/
-    normal/ *.png
-    abnormal/ *.png
-  val/        (opcional)
-  test/       (opcional)
+ecg_raw/
+  ECG Images of Myocardial Infarction Patients/
+  ECG Images of Patient that have abnormal heartbeat/
+  ECG Images of Patient that have History of MI/
+  Normal Person ECG Images/
 ```
 
-### Pré-processamento
+No notebook `01_preprocess.ipynb`, essas pastas são mapeadas para os rótulos em português descritos acima, e cada arquivo de imagem passa a ser representado por uma linha no `manifest.csv`.
 
-No notebook de pré-processamento, esse diretório é varrido recursivamente e cada imagem é indexada com:
+### Pré-processamento e manifest
 
-filepath: caminho absoluto da imagem.
-label: nome da classe (por exemplo, normal ou abnormal).
-Em seguida fazemos um split estratificado para gerar o manifest.csv com colunas:
+No notebook de pré-processamento (`01_preprocess.ipynb`), o diretório de dados é varrido e cada imagem é indexada com:
 
-filepath
-label
-split (train, val, test)
+- `filepath`: caminho absoluto da imagem.
+- `label`: nome da classe em português (`infarto_mi`, `batimento_anormal`, `historico_infarto`, `normal`).
+
+Em seguida fazemos um **split estratificado** para gerar o `manifest.csv` com colunas:
+
+- `filepath`
+- `label`
+- `split` (`train`, `val`, `test`)
+
 O arquivo é salvo em:
 
-text
+```text
 apps/vision-assistant/data/manifest.csv
-Esse manifest passa a ser a “fonte de verdade” para treino/validação/teste.
+```
+
+Esse manifest passa a ser a “fonte de verdade” para treino/validação/teste e é consumido diretamente pelos scripts `src/train.py` e `src/evaluate.py`.
 
 Tamanho da imagem e rationale
 Tamanho (image_size)
@@ -127,7 +136,7 @@ Se esses artefatos se correlacionarem com certas labels (por exemplo, exames “
 Rotulagem imperfeita:
 Erros de anotação (por exemplo, laudos ambíguos ou divergentes entre especialistas) introduzem ruído nas labels.
 Desbalanceamento de classes
-É comum em datasets médicos que a classe normal seja muito mais frequente que abnormal ou vice-versa (por exemplo, em conjuntos enriquecidos com casos patológicos).
+Mesmo neste dataset específico (com 928 imagens), há diferenças entre o número de exemplos por classe (`normal` > `infarto_mi` > `batimento_anormal` > `historico_infarto`).
 Desbalanceamento pode levar a:
 Alta acurácia aparente favorecendo sempre a classe majoritária.
 Baixa sensibilidade para a classe minoritária (pior caso: a classe clinicamente mais relevante).
